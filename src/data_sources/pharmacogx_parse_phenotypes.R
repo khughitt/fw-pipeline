@@ -67,7 +67,7 @@ if ('filter' %in% names(drug_config)) {
 }
 
 # impute remaining missing values
-drug_dat_imputed <- as.matrix(kNN(t(drug_dat), drug_config$impute$k)[, 1:nrow(drug_dat)])
+drug_dat_imputed <- as.matrix(kNN(t(drug_dat), k = drug_config$impute$k)[, 1:nrow(drug_dat)])
 rownames(drug_dat_imputed) <- colnames(drug_dat)
 
 # drop any drugs with no variance
