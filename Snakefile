@@ -34,12 +34,13 @@ for dataset_id in configs:
 rule all:
     input: 
         expand(join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz'),
+               zip,
                dataset=datasets, version=versions, feature=features, phenotype=phenotypes)
 
 rule build_weights:
     input:
-        join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz'),
-        join(config['output_dir'], '{dataset}/{version}/genes/phenotypes/{phenotype}.tsv.gz')
+        features=join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz'),
+        phenotype=join(config['output_dir'], '{dataset}/{version}/genes/phenotypes/{phenotype}.tsv.gz')
     output: join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz')
     shell: 'touch {output}'
 
