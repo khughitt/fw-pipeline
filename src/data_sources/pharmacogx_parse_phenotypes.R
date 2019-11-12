@@ -76,5 +76,8 @@ drug_dat_imputed <- drug_dat_imputed[, apply(drug_dat_imputed, 2, var) != 0]
 # transpose back to original orientation and store
 drug_dat_imputed <- t(drug_dat_imputed)
 
-write_tsv(as_tibble(drug_dat_imputed), snakemake@output[[1]])
+drug_dat_imputed %>%
+  as.data.frame() %>%
+  rownames_to_column('drug') %>%
+  write_tsv(snakemake@output[[1]])
 
