@@ -24,10 +24,10 @@ if (!pset_id %in% supported_psets) {
   stop(sprintf("Unsupported Pharmacoset specified: %s!", pset_id))
 }
 
-pset_rda <- file.path(config$data_dir, paste0(pset_id, '.RData'))
+pset_rda <- file.path(config$rda_dir, paste0(pset_id, '.RData'))
 
 if (!file.exists(pset_rda)) {
-  pset <- downloadPSet(pset_id, saveDir = config$data_dir)
+  pset <- downloadPSet(pset_id, saveDir = config$rda_dir)
 } else {
   pset <- get(load(pset_rda))
 }

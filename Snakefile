@@ -42,7 +42,7 @@ rule build_weights:
         features=join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz'),
         phenotype=join(config['output_dir'], '{dataset}/{version}/genes/phenotypes/{phenotype}.tsv.gz')
     output: join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz')
-    shell: 'touch {output}'
+    script: 'src/data_sources/pharmacogx_compute_cor.R'
 
 rule parse_features:
     output: join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz')
