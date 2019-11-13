@@ -16,18 +16,16 @@ set.seed(1)
 config <- snakemake@params$config
 pset_id <- config$pset
 
-#cor_config <- snakemake@config$methods$correlation
-
-supported_psets <- c('GDSC1000')
+supported_psets <- c('GDSC1000', 'CCLE_2013')
 
 if (!pset_id %in% supported_psets) {
   stop(sprintf("Unsupported Pharmacoset specified: %s!", pset_id))
 }
 
-pset_rda <- file.path(config$rda_dir, paste0(pset_id, '.RData'))
+pset_rda <- file.path(config$cache_dir, paste0(pset_id, '.RData'))
 
 if (!file.exists(pset_rda)) {
-  pset <- downloadPSet(pset_id, saveDir = config$rda_dir)
+  pset <- downloadPSet(pset_id, saveDir = config$cache_dir)
 } else {
   pset <- get(load(pset_rda))
 }
@@ -35,13 +33,29 @@ if (!file.exists(pset_rda)) {
 # iterate over feature datasets and generate "clean" versions of each
 for (mdatatype in names(config$features)) {
   eset <- summarizeMolecularProfiles(pset, mDataType = mdatatype)
-  dat <- bind_cols(symbol = fData(eset)$Symbol, as.data.frame(exprs(eset)))
+
+  # convert expressionset to a tibble
+  if ('symbol' %in% colnames(fData(eset))) {
+    gene_symbols <- fData(eset)$symbol
+  } else if ('Symbol' %in% colnames(fData(eset))) {
+    gene_symbols <- fData(eset)$Symbol
+  }
+  dat <- bind_cols(symbol = gene_symbols, as.data.frame(exprs(eset)))
 
   # retrieve missing gene symbols from annotables
-  missing_ind <- which(is.na(dat$symbol))
-  missing_ensgene <- fData(eset)$Ensembl[missing_ind]
+  if ('EnsemblGeneId' %in% colnames(fData(eset))) {
+    # GDSC, GDSC1000 (GRCh37 / ensgene)
+    missing_ind <- which(is.na(dat$symbol))
+    missing_ensgene <- fData(eset)$EnsemblGeneId[missing_ind]
 
-  dat$symbol[missing_ind] <- grch38$symbol[match(missing_ensgene, grch38$ensgene)]
+    dat$symbol[missing_ind] <- grch38$symbol[match(missing_ensgene, grch38$ensgene)]
+  } else if ('GENEID' %in% colnames(fData(eset))) {
+    # CCLE (GRCh38 / entrez)
+    missing_ind <- which(is.na(dat$symbol))
+    missing_entrez <- fData(eset)$GENEID[missing_ind]
+
+    dat$symbol[missing_ind] <- grch37$symbol[match(missing_entrez, grch37$entrez)]
+  }
 
   # drop rna entries that could not be mapped to gene symbols
   dat <- dat[!is.na(dat$symbol), ]

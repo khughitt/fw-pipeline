@@ -14,20 +14,19 @@ set.seed(1)
 #
 # Setup
 #
-# config <- snakemake@params$cfg$psets[[pset_id]]
 config <- snakemake@params$config
 pset_id <- config$pset
 
-supported_psets <- c('GDSC1000')
+supported_psets <- c('GDSC1000', 'CCLE_2013')
 
 if (!pset_id %in% supported_psets) {
   stop(sprintf("Unsupported Pharmacoset specified: %s!", pset_id))
 }
 
-pset_rda <- file.path(config$rda_dir, paste0(pset_id, '.RData'))
+pset_rda <- file.path(config$cache_dir, paste0(pset_id, '.RData'))
 
 if (!file.exists(pset_rda)) {
-  pset <- downloadPSet(pset_id, saveDir = config$rda_dir)
+  pset <- downloadPSet(pset_id, saveDir = config$cache_dir)
 } else {
   pset <- get(load(pset_rda))
 }
