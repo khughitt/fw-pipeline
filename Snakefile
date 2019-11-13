@@ -33,26 +33,36 @@ for dataset_id in configs:
 
 rule all:
     input: 
-        expand(join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz'),
+        expand(join(config['output_dir'], '{dataset}/{version}/genes/fgsea/{feature}/{phenotype}.tsv.gz'),
                zip,
                dataset=datasets, version=versions, feature=features, phenotype=phenotypes)
+
+rule run_fgsea:
+    input: 
+        join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz') 
+    output:
+        join(config['output_dir'], '{dataset}/{version}/genes/fgsea/{feature}/{phenotype}.tsv.gz')
+    script: 'src/enrichment/run_fgsea.R'
 
 rule build_weights:
     input:
         features=join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz'),
         phenotype=join(config['output_dir'], '{dataset}/{version}/genes/phenotypes/{phenotype}.tsv.gz')
-    output: join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz')
-    script: 'src/data_sources/pharmacogx_compute_cor.R'
+    output:
+        join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz')
+    script: 'src/datasource/pharmacogx/compute_cor.R'
 
 rule parse_features:
-    output: join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz')
+    output:
+        join(config['output_dir'], '{dataset}/{version}/genes/features/{feature}.tsv.gz')
     params:
         config=lambda wildcards, output: configs[wildcards.dataset]
-    script: 'src/data_sources/pharmacogx_parse_features.R'
+    script: 'src/datasource/pharmacogx/parse_features.R'
 
 rule parse_phenotypes:
-    output: join(config['output_dir'], '{dataset}/{version}/genes/phenotypes/{phenotype}.tsv.gz')
+    output:
+        join(config['output_dir'], '{dataset}/{version}/genes/phenotypes/{phenotype}.tsv.gz')
     params:
         config=lambda wildcards, output: configs[wildcards.dataset]
-    script: 'src/data_sources/pharmacogx_parse_phenotypes.R'
+    script: 'src/datasource/pharmacogx/parse_phenotypes.R'
 

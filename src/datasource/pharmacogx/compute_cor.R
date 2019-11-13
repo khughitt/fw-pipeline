@@ -37,7 +37,7 @@ for (cor_method in config$funcs) {
       symbol = pull(feat_dat, 1),
       cor    = as.numeric(drug_feat_cors)
     )
-    colnames(res) <- c(feat_id_col, sprintf("%s_%s_%s", snakemake@wildcards$phenotype, config$collapse, cor_method))
+    colnames(res) <- c(feat_id_col, sprintf("%s_%s_%s", snakemake@wildcards$phenotype, collapse_func, cor_method))
 
     if (is.null(drug_feat_weights)) {
       drug_feat_weights <- res
