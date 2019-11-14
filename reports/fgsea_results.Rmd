@@ -1,0 +1,72 @@
+---
+title: "Summary of fgsea Enrichment Results"
+date: "`r strftime(Sys.time(), '%Y-%m-%d')`"
+params:
+   rmd: "summarize_fgsea_results.Rmd"
+output:
+  html_document:
+    df_print: kable
+    toc: true
+    toc_depth: 2
+---
+
+# Setup
+
+```{r echo = FALSE}
+rmd_dir <- file.path(snakemake@scriptdir, 'Rmd')
+```
+
+```{r setup, message = FALSE}
+library(knitr)
+library(tidyverse)
+
+options(stringsAsFactors = FALSE)
+```
+
+```{r load_fgsea_results}
+fgsea_res <- lapply(snakemake@input, read_tsv, col_types = cols())
+names(fgsea_res) <- unlist(snakemake@input)
+```
+
+# gene weights
+
+```{r results = 'asis'}
+for (dataset in names(fgsea_res)) {
+
+  cat(sprintf('## %s\n', dataset))
+
+  dat <- fgsea_res[[dataset]]
+
+  # temp: drop entries with no p-values (moved upstream..; can remove this in future..)
+  dat <- dat[complete.cases(dat), ]
+
+  dat %>%
+    group_by(field) %>%
+    summarize(mean_pval = mean(pval), median_pval = median(pval),
+              num_sig = sum(padj < 0.05),
+              n = n()) %>%
+    arrange(mean_pval) %>%
+    kable() %>%
+    print()
+
+  cat('\n')
+}
+```
+
+# gene sets
+
+```{r gene_sea_fgsea_comparison}
+dat %>% 
+  group_by(gene_set) %>%
+  summarize(mean_pval = mean(pval), median_pval = median(pval),
+            ratio_sig = sum(padj < 0.05) / length(padj),
+            n = n()) %>%
+  arrange(mean_pval)
+```
+
+# Session Information
+
+```{r}
+sessionInfo()
+```
+

@@ -63,5 +63,8 @@ for (i in 2:ncol(feat_weights)) {
   }
 }
 
+# drop entries for which no p-value could be computed
+fgsea_results <- fgsea_results[complete.cases(fgsea_results), ]
+
 write_tsv(fgsea_results, snakemake@output[[1]])
 

@@ -31,13 +31,16 @@ for dataset_id in configs:
             features.append(feature_type)
             phenotypes.append(phenotype)
 
-rule all:
+rule summarize_fgsea_results:
     input: 
         expand(join(config['output_dir'], '{dataset}/{version}/genes/fgsea/{feature}/{phenotype}.tsv.gz'),
                zip,
                dataset=datasets, version=versions, feature=features, phenotype=phenotypes),
         join(config['output_dir'], 'fgsea/combined_weights_fgsea.tsv.gz')
-        
+    output:
+        join(config['report_dir'], config['version'], 'fgsea_results.html')
+    script:
+        'reports/fgsea_results.Rmd'
 
 rule run_fgsea_combined:
     input: 
