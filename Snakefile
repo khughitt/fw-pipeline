@@ -35,14 +35,32 @@ rule all:
     input: 
         expand(join(config['output_dir'], '{dataset}/{version}/genes/fgsea/{feature}/{phenotype}.tsv.gz'),
                zip,
-               dataset=datasets, version=versions, feature=features, phenotype=phenotypes)
+               dataset=datasets, version=versions, feature=features, phenotype=phenotypes),
+        join(config['output_dir'], 'fgsea/combined_weights_fgsea.tsv.gz')
+        
 
-rule run_fgsea:
+rule run_fgsea_combined:
+    input: 
+        join(config['output_dir'], 'weights/combined_weights.tsv.gz')
+    output:
+        join(config['output_dir'], 'fgsea/combined_weights_fgsea.tsv.gz')
+    script: 'src/enrichment/run_fgsea.R'
+
+rule run_fgsea_indiv:
     input: 
         join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz') 
     output:
         join(config['output_dir'], '{dataset}/{version}/genes/fgsea/{feature}/{phenotype}.tsv.gz')
     script: 'src/enrichment/run_fgsea.R'
+
+rule combine_weights:
+    input: 
+        expand(join(config['output_dir'], '{dataset}/{version}/genes/weights/{feature}/{phenotype}.tsv.gz'),
+               zip,
+               dataset=datasets, version=versions, feature=features, phenotype=phenotypes)
+    output:
+        join(config['output_dir'], 'weights/combined_weights.tsv.gz')
+    script: 'src/combine/combine_weights.R'
 
 rule build_weights:
     input:

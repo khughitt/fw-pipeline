@@ -26,6 +26,11 @@ drug_dat <- t(drug_dat[, -1])
 # iterate over correlation methods and measure feature-drug correlations for each
 drug_feat_weights <- NULL
 
+# helper functions; will be moved to external file..
+max_abs <- function(x) {
+  max(abs(x), na.rm = TRUE)
+}
+
 for (cor_method in config$funcs) {
   for (collapse_func in config$collapse) {
     drug_feat_cors <- apply(feat_dat[, -1], 1, function(feat_vals) {
