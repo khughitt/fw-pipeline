@@ -10,53 +10,252 @@ output:
     toc_depth: 2
 ---
 
+# Overview
+
+Naming Conventions:
+
+- **dataset**: `XX_pearson_max` -- maximum feature-pheno pearson correlation used as weight
+- **field**: `max_score`: when combining weights from different sources, the maximum
+  value is used.
+
 # Setup
 
-```{r echo = FALSE}
-rmd_dir <- file.path(snakemake@scriptdir, 'Rmd')
-```
-
 ```{r setup, message = FALSE}
+library(fgsea)
 library(knitr)
+library(gridExtra)
+library(GSEABase)
 library(tidyverse)
 
 options(stringsAsFactors = FALSE)
+options(digits = 3)
+
+opts_chunk$set(fig.width = 20, fig.height = 11.24, dpi = 192, retina = 1)
 ```
 
-```{r load_fgsea_results}
-fgsea_res <- lapply(snakemake@input, read_tsv, col_types = cols())
-names(fgsea_res) <- unlist(snakemake@input)
+# Feature Weights
+
+```{r load_feature_weights}
+# load feature weights
+gene_weight_files <- c(snakemake@input$indiv_weights, snakemake@input$combined_weights)
+
+wts_list <- lapply(gene_weight_files, read_tsv, col_types = cols())
+
+# todo: replace with cleaner method of keeping track of dataset ids
+ids <- sub(paste0(snakemake@config$output_dir, '/'), '', unlist(gene_weight_files))
+ids <- sub('weights/', '', sub('.tsv.gz', '', ids))
+
+names(wts_list) <- ids
+
+sapply(wts_list, nrow)
+sapply(wts_list, ncol)
 ```
 
-# gene weights
+```{r include = FALSE}
+# debug
+if (snakemake@config$dev_mode$enabled) {
+  save.image('/rda/nih/fw/fgsea_results.rda')
+}
+```
 
-```{r results = 'asis'}
-for (dataset in names(fgsea_res)) {
+## Distribution of Feature Weghts
 
-  cat(sprintf('## %s\n', dataset))
+```{r, results = 'asis'}
+for (dataset_id in names(wts_list)) {
+  cat(sprintf("### %s\n", dataset_id))
 
-  dat <- fgsea_res[[dataset]]
+  dataset <- wts_list[[dataset_id]]
 
-  # temp: drop entries with no p-values (moved upstream..; can remove this in future..)
-  dat <- dat[complete.cases(dat), ]
+  plts <- list()
 
-  dat %>%
-    group_by(field) %>%
-    summarize(mean_pval = mean(pval), median_pval = median(pval),
-              num_sig = sum(padj < 0.05),
-              n = n()) %>%
-    arrange(mean_pval) %>%
-    kable() %>%
-    print()
+  for (feat_wt in colnames(dataset)[-1]) {
+    dat <- data.frame(x = dataset[[feat_wt]])
+
+    plt_title <- sprintf("%s - %s", dataset_id, feat_wt)
+
+    if (grepl('auc', feat_wt)) {
+      plt_color <- '#e31a51'
+    } else if(grepl('ic50', feat_wt)) {
+      plt_color <- '#4fe319'
+    } else {
+      plt_color <- '#194fe3'
+    }
+
+    plts[[plt_title]] <- ggplot(dat, aes(x)) +
+      geom_density(fill = plt_color) +
+      xlab('weight') +
+      ggtitle(plt_title)
+  }
+
+  grid.arrange(grobs = plts, ncol = 3)
 
   cat('\n')
 }
 ```
 
-# gene sets
+# Functional Enrichment
 
-```{r gene_sea_fgsea_comparison}
-dat %>% 
+```{r load_fgsea_results}
+# load fgsea results
+fgsea_res_files <- c(snakemake@input$indiv_fgsea, snakemake@input$combined_fgsea)
+
+fgsea_res <- lapply(fgsea_res_files, read_tsv, col_types = cols())
+
+ids <- sub(paste0(snakemake@config$output_dir, '/'), '', unlist(fgsea_res_files))
+ids <- sub('_fgsea', '', sub('fgsea/', '', sub('.tsv.gz', '', ids)))
+
+names(fgsea_res) <- ids
+
+# combine fgsea results into a single dataframe
+dat <- NULL
+
+for (dataset in names(fgsea_res)) {
+  dat <- rbind(dat, cbind(dataset, fgsea_res[[dataset]]))
+}
+
+# temp: drop entries with no p-values (moved upstream..; can remove this in future..)
+dat <- dat[complete.cases(dat), ]
+```
+
+```{r load_gene_sets}
+config <- snakemake@config$gene_sets
+
+gene_set_files <- file.path(config$include, list.files(config$include))
+
+gene_set_collections <- lapply(gene_set_files, function(x) {
+  res <- geneIds(getGmt(x))
+  lapply(res, function(gene_set) {
+    gene_set[gene_set != '']
+  })
+})
+names(gene_set_collections) <- tools::file_path_sans_ext(basename(gene_set_files))
+
+# remove gene set :length suffixes, if present
+names(gene_set_collections) <- sub(':\\d+$', '', names(gene_set_collections))
+
+# remove any leading or trailing whitespace in gene set names;
+# encountered at least one instance of this ("HEK 293 T-rex" in NCI-60 gene set
+# collection)
+for (collection in names(gene_set_collections)) {
+  names(gene_set_collections[[collection]]) <- trimws(names(gene_set_collections[[collection]]))
+}
+
+# remove gene set weights, if present
+# e.g. "ANXA1,1.0" -> "ANXA1"
+for (collection in names(gene_set_collections)) {
+  gene_set_collections[[collection]] <- lapply(gene_set_collections[[collection]], function(x) {
+    sub(',\\d+\\.\\d+$', '', x)
+  })
+}
+
+# exclude any gene sets which are either too large or too small
+for (collection in names(gene_set_collections)) {
+  set_sizes <- lapply(gene_set_collections[[collection]], length)
+  mask <- (set_sizes >= config$min_size) & (set_sizes <= config$max_size)
+  gene_set_collections[[collection]] <- gene_set_collections[[collection]][mask]
+}
+```
+
+# top genes
+
+```{r, results = 'asis'}
+for (dataset_id in names(wts_list)) {
+  cat(sprintf("## %s\n", dataset_id))
+
+  wts <- wts_list[[dataset_id]] %>%
+    pivot_longer(-symbol, names_to = 'method', values_to = 'score')
+
+  for (score_method in unique(wts$method)) {
+    cat(sprintf("### %s\n", score_method))
+
+    wts %>%
+      filter(dataset == dataset_id) %>%
+      filter(method == score_method) %>%
+      arrange(desc(score)) %>%
+      head(15) %>%
+      kable() %>%
+      print()
+
+    cat('\n')
+  }
+}
+```
+
+# gene weight functional enrichment
+
+```{r enrichment_by_weights_dataset}
+dat %>%
+  group_by(dataset, field) %>%
+  summarize(mean_pval = mean(pval), median_pval = median(pval),
+            num_sig = sum(padj < 0.05),
+            n = n()) %>%
+  arrange(mean_pval)
+```
+
+```{r gene_set_enrichment_comparison}
+dat %>%
+  group_by(gene_set) %>%
+  summarize(mean_pval = mean(pval), median_pval = median(pval),
+            ratio_sig = sum(padj < 0.05) / length(padj),
+            n = n()) %>%
+  arrange(mean_pval)
+```
+
+# top pathways / gene sets
+
+```{r, fig.with = 12, fig.height = 16}
+# for comparison, we will show the same gene sets for each of the different feature
+# weight versions
+
+# get a list of the top gene set from each version of the gene weights
+top_gene_sets <- dat %>%
+  group_by(dataset, field) %>%
+  arrange(pval) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(gene_set, pathway)
+
+top_gene_sets
+
+top_gene_sets <- top_gene_sets[!duplicated(top_gene_sets), ]
+
+for (i in seq_along(nrow(top_gene_sets))) {
+  plts <- list()
+
+  collection <- top_gene_sets$gene_set[i]
+
+  gene_set   <- top_gene_sets$pathway[i]
+
+  for (dataset_id in unique(dat$dataset)) {
+    weights_dat <- wts_list[[dataset_id]]
+
+    for (weight_col in colnames(weights_dat)[-1]) {
+      feat_weights <- weights_dat %>%
+        select(symbol, weight_col) %>%
+        deframe()
+
+      # DEV
+      feat_weights <- feat_weights[!is.na(feat_weights)]
+
+      plt_title <- sprintf('%s / %s', dataset_id, weight_col)
+
+      idx <- sprintf("%s_%s", dataset_id, weight_col)
+
+      gene_sets <- gene_set_collections[[collection]][[gene_set]]
+
+      plts[[idx]] <- plotEnrichment(gene_sets,  feat_weights) +
+        labs(title = plt_title)
+    }
+  }
+
+  grid.arrange(grobs = plts, ncol = 5, top = gene_set)
+}
+```
+
+# top collections
+
+```{r gene_set_enrichment_top_collections}
+dat %>%
   group_by(gene_set) %>%
   summarize(mean_pval = mean(pval), median_pval = median(pval),
             ratio_sig = sum(padj < 0.05) / length(padj),

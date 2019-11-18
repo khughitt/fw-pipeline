@@ -4,7 +4,7 @@
 suppressMessages(library(tidyverse))
 
 # get correlation settings
-config <- snakemake@config$methods$correlation
+correlation_params <- snakemake@config$combine$correlation
 
 # load processed PharmacoGx drug and molecular feature data
 feat_dat <- read_tsv(snakemake@input$features)
@@ -26,13 +26,17 @@ drug_dat <- t(drug_dat[, -1])
 # iterate over correlation methods and measure feature-drug correlations for each
 drug_feat_weights <- NULL
 
+if (snakemake@config$dev_mode$enabled) {
+  save.image(file.path(snakemake@config$dev_mode$rda_dir, 'build_weights.rda'))
+}
+
 # helper functions; will be moved to external file..
-max_abs <- function(x) {
+maxabs <- function(x) {
   max(abs(x), na.rm = TRUE)
 }
 
-for (cor_method in config$funcs) {
-  for (collapse_func in config$collapse) {
+for (cor_method in correlation_params$methods) {
+  for (collapse_func in correlation_params$collapse_funcs) {
     drug_feat_cors <- apply(feat_dat[, -1], 1, function(feat_vals) {
       drug_cors <- as.numeric(cor(feat_vals, drug_dat[, -1], method = cor_method))
       do.call(collapse_func, list(drug_cors))
@@ -42,7 +46,10 @@ for (cor_method in config$funcs) {
       symbol = pull(feat_dat, 1),
       cor    = as.numeric(drug_feat_cors)
     )
-    colnames(res) <- c(feat_id_col, sprintf("%s_%s_%s", snakemake@wildcards$phenotype, collapse_func, cor_method))
+
+    cname <- sprintf("%s_%s_%s_%s", snakemake@wildcards$dataset,
+                     snakemake@wildcards$phenotype, collapse_func, cor_method)
+    colnames(res) <- c(feat_id_col, cname)
 
     if (is.null(drug_feat_weights)) {
       drug_feat_weights <- res
@@ -53,6 +60,9 @@ for (cor_method in config$funcs) {
   }
 }
 
+if (snakemake@config$dev_mode$enabled) {
+  save.image(file.path(snakemake@config$dev_mode$rda_dir, 'build_weights.rda'))
+}
+
 # save result
 write_tsv(drug_feat_weights, snakemake@output[[1]])
-
