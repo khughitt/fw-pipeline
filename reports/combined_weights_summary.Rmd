@@ -1,8 +1,8 @@
 ---
-title: "Summary of fgsea Enrichment Results"
+title: "Comparison of Gene Weights"
 date: "`r strftime(Sys.time(), '%Y-%m-%d')`"
 params:
-   rmd: "summarize_fgsea_results.Rmd"
+   rmd: "combined_weights_summary.Rmd"
 output:
   html_document:
     df_print: kable
@@ -12,11 +12,19 @@ output:
 
 # Overview
 
+In this file, different versions of the gene weightings (generated via different
+gene-phenotype associations methods or parameters and different methods for generating
+combined weights from the inidivual sources) are compared.
+
 Naming Conventions:
 
 - **dataset**: `XX_pearson_max` -- maximum feature-pheno pearson correlation used as weight
 - **field**: `max_score`: when combining weights from different sources, the maximum
   value is used.
+
+(Note: the handling and presentation of dataset sources, methods used to measure
+gene-phenotype associations, and methods for collapsing individual dataset weights needs
+to be improved..)
 
 # Setup
 
@@ -45,6 +53,11 @@ wts_list <- lapply(gene_weight_files, read_tsv, col_types = cols())
 ids <- sub(paste0(snakemake@config$output_dir, '/'), '', unlist(gene_weight_files))
 ids <- sub('weights/', '', sub('.tsv.gz', '', ids))
 
+# temp: "gdsc1000/0.1/genes/rna/auc_recomputed" -> "gdsc1000_auc_recomputed"
+# note: this cleaning appears in two places in the file: once for gene weights, and once
+# for fgsea results..
+ids[grepl('/', ids)] <- unlist(lapply(lapply(str_split(ids[grepl('/', ids)], '/'), '[', c(1, 5)), paste0, collapse = '_'))
+
 names(wts_list) <- ids
 
 sapply(wts_list, nrow)
@@ -54,13 +67,13 @@ sapply(wts_list, ncol)
 ```{r include = FALSE}
 # debug
 if (snakemake@config$dev_mode$enabled) {
-  save.image('/rda/nih/fw/fgsea_results.rda')
+  save.image('/rda/nih/fw/combined_weights_summary.rda')
 }
 ```
 
 ## Distribution of Feature Weghts
 
-```{r, results = 'asis'}
+```{r, results = 'asis', dpi = 128}
 for (dataset_id in names(wts_list)) {
   cat(sprintf("### %s\n", dataset_id))
 
@@ -69,8 +82,6 @@ for (dataset_id in names(wts_list)) {
   plts <- list()
 
   for (feat_wt in colnames(dataset)[-1]) {
-    dat <- data.frame(x = dataset[[feat_wt]])
-
     plt_title <- sprintf("%s - %s", dataset_id, feat_wt)
 
     if (grepl('auc', feat_wt)) {
@@ -81,7 +92,8 @@ for (dataset_id in names(wts_list)) {
       plt_color <- '#194fe3'
     }
 
-    plts[[plt_title]] <- ggplot(dat, aes(x)) +
+    plt_dat <- data.frame(x = dataset[[feat_wt]])
+    plts[[plt_title]] <- ggplot(plt_dat, aes(x)) +
       geom_density(fill = plt_color) +
       xlab('weight') +
       ggtitle(plt_title)
@@ -93,28 +105,57 @@ for (dataset_id in names(wts_list)) {
 }
 ```
 
-# Functional Enrichment
+# Top genes
+
+```{r, results = 'asis'}
+for (dataset_id in names(wts_list)) {
+  cat(sprintf("## %s\n", dataset_id))
+
+  wts <- wts_list[[dataset_id]] %>%
+    pivot_longer(-symbol, names_to = 'method', values_to = 'score')
+
+  for (score_method in unique(wts$method)) {
+    cat(sprintf("### %s\n", score_method))
+
+    wts %>%
+      filter(method == score_method) %>%
+      select(-method) %>%
+      arrange(desc(score)) %>%
+      head(15) %>%
+      kable() %>%
+      print()
+
+    cat('\n')
+  }
+}
+```
+
+# Gene weight functional enrichment
 
 ```{r load_fgsea_results}
 # load fgsea results
 fgsea_res_files <- c(snakemake@input$indiv_fgsea, snakemake@input$combined_fgsea)
 
-fgsea_res <- lapply(fgsea_res_files, read_tsv, col_types = cols())
+fgsea_list <- lapply(fgsea_res_files, read_tsv, col_types = cols())
 
+# temp: handling of dataset/method names needs to be cleaned up...
 ids <- sub(paste0(snakemake@config$output_dir, '/'), '', unlist(fgsea_res_files))
 ids <- sub('_fgsea', '', sub('fgsea/', '', sub('.tsv.gz', '', ids)))
 
-names(fgsea_res) <- ids
+# just pretend you didn't see this... (will be replaced)
+ids[grepl('/', ids)] <- unlist(lapply(lapply(str_split(ids[grepl('/', ids)], '/'), '[', c(1, 5)), paste0, collapse = '_'))
+
+names(fgsea_list) <- ids
 
 # combine fgsea results into a single dataframe
-dat <- NULL
+fgsea_res <- NULL
 
-for (dataset in names(fgsea_res)) {
-  dat <- rbind(dat, cbind(dataset, fgsea_res[[dataset]]))
+for (dataset in names(fgsea_list)) {
+  fgsea_res <- rbind(fgsea_res, cbind(dataset, fgsea_list[[dataset]]))
 }
 
 # temp: drop entries with no p-values (moved upstream..; can remove this in future..)
-dat <- dat[complete.cases(dat), ]
+fgsea_res <- fgsea_res[complete.cases(fgsea_res), ]
 ```
 
 ```{r load_gene_sets}
@@ -156,35 +197,10 @@ for (collection in names(gene_set_collections)) {
 }
 ```
 
-# top genes
-
-```{r, results = 'asis'}
-for (dataset_id in names(wts_list)) {
-  cat(sprintf("## %s\n", dataset_id))
-
-  wts <- wts_list[[dataset_id]] %>%
-    pivot_longer(-symbol, names_to = 'method', values_to = 'score')
-
-  for (score_method in unique(wts$method)) {
-    cat(sprintf("### %s\n", score_method))
-
-    wts %>%
-      filter(dataset == dataset_id) %>%
-      filter(method == score_method) %>%
-      arrange(desc(score)) %>%
-      head(15) %>%
-      kable() %>%
-      print()
-
-    cat('\n')
-  }
-}
-```
-
-# gene weight functional enrichment
+## Gene weight vesions ranked by level of functional enrichment
 
 ```{r enrichment_by_weights_dataset}
-dat %>%
+fgsea_res %>%
   group_by(dataset, field) %>%
   summarize(mean_pval = mean(pval), median_pval = median(pval),
             num_sig = sum(padj < 0.05),
@@ -192,8 +208,10 @@ dat %>%
   arrange(mean_pval)
 ```
 
+## Gene set collections with the highest levels of enrichment
+
 ```{r gene_set_enrichment_comparison}
-dat %>%
+fgsea_res %>%
   group_by(gene_set) %>%
   summarize(mean_pval = mean(pval), median_pval = median(pval),
             ratio_sig = sum(padj < 0.05) / length(padj),
@@ -201,33 +219,41 @@ dat %>%
   arrange(mean_pval)
 ```
 
-# top pathways / gene sets
+```{r include = FALSE}
+if (snakemake@config$dev_mode$enabled) {
+  save.image('/rda/nih/fw/combined_weights_summary.rda')
+}
+```
 
-```{r, fig.with = 12, fig.height = 16}
+# Top pathways / gene sets
+
+```{r}
 # for comparison, we will show the same gene sets for each of the different feature
 # weight versions
 
-# get a list of the top gene set from each version of the gene weights
-top_gene_sets <- dat %>%
+# get the top enriched pathway for each version of the gene weights
+top_gene_sets <- fgsea_res %>%
   group_by(dataset, field) %>%
   arrange(pval) %>%
   slice(1) %>%
   ungroup() %>%
   select(gene_set, pathway)
 
-top_gene_sets
-
 top_gene_sets <- top_gene_sets[!duplicated(top_gene_sets), ]
 
 for (i in seq_along(nrow(top_gene_sets))) {
-  plts <- list()
-
   collection <- top_gene_sets$gene_set[i]
 
   gene_set   <- top_gene_sets$pathway[i]
 
-  for (dataset_id in unique(dat$dataset)) {
+  for (dataset_id in unique(fgsea_res$dataset)) {
     weights_dat <- wts_list[[dataset_id]]
+
+    grid_title <- sprintf("%s: %s (%s)", dataset_id, gene_set, collection)
+
+    print(grid_title)
+
+    plts <- list()
 
     for (weight_col in colnames(weights_dat)[-1]) {
       feat_weights <- weights_dat %>%
@@ -246,21 +272,9 @@ for (i in seq_along(nrow(top_gene_sets))) {
       plts[[idx]] <- plotEnrichment(gene_sets,  feat_weights) +
         labs(title = plt_title)
     }
+    grid.arrange(grobs = plts, ncol = ceiling(sqrt(length(plts))), top = grid_title)
   }
-
-  grid.arrange(grobs = plts, ncol = 5, top = gene_set)
 }
-```
-
-# top collections
-
-```{r gene_set_enrichment_top_collections}
-dat %>%
-  group_by(gene_set) %>%
-  summarize(mean_pval = mean(pval), median_pval = median(pval),
-            ratio_sig = sum(padj < 0.05) / length(padj),
-            n = n()) %>%
-  arrange(mean_pval)
 ```
 
 # Session Information

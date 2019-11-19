@@ -48,7 +48,7 @@ rule run_fgsea_combined:
         join(config['output_dir'], 'fgsea/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz')
     script: 'src/enrichment/run_fgsea.R'
 
-rule summarize_fgsea_results:
+rule summarize_combined_weights:
     input: 
         indiv_weights = expand(join(config['output_dir'], 'weights/{dataset}/{version}/genes/{feature}/{phenotype}.tsv.gz'),
                                zip,
@@ -61,9 +61,9 @@ rule summarize_fgsea_results:
         combined_fgsea = expand(join(config['output_dir'], 'fgsea/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz'), 
                                 cor_method=cor_methods, collapse_func=collapse_funcs)
     output:
-        join(config['report_dir'], config['version'], 'fgsea_results.html')
+        join(config['report_dir'], config['version'], 'combined_weights_summary.html')
     script:
-        'reports/fgsea_results.Rmd'
+        'reports/combined_weights_summary.Rmd'
 
 rule run_fgsea_indiv:
     input: 
