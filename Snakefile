@@ -39,15 +39,6 @@ collapse_funcs = config['combine']['correlation']['collapse_funcs']
 if config['dev_mode']['enabled']:
     os.makedirs(config['dev_mode']['rda_dir'], mode = 755, exist_ok=True)
 
-rule run_fgsea_combined:
-    input: 
-        #expand(join(config['output_dir'], 'weights/combined_weights_{cor_method}_{collapse_func}s.tsv.gz'), 
-        #       cor_method=cor_methods, collapse_func=collapse_funcs)
-        join(config['output_dir'], 'weights/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
-    output:
-        join(config['output_dir'], 'fgsea/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz')
-    script: 'src/enrichment/run_fgsea.R'
-
 rule summarize_combined_weights:
     input: 
         indiv_weights = expand(join(config['output_dir'], 'weights/{dataset}/{version}/genes/{feature}/{phenotype}.tsv.gz'),
@@ -64,6 +55,15 @@ rule summarize_combined_weights:
         join(config['report_dir'], config['version'], 'combined_weights_summary.html')
     script:
         'reports/combined_weights_summary.Rmd'
+
+rule run_fgsea_combined:
+    input: 
+        #expand(join(config['output_dir'], 'weights/combined_weights_{cor_method}_{collapse_func}s.tsv.gz'), 
+        #       cor_method=cor_methods, collapse_func=collapse_funcs)
+        join(config['output_dir'], 'weights/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
+    output:
+        join(config['output_dir'], 'fgsea/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz')
+    script: 'src/enrichment/run_fgsea.R'
 
 rule run_fgsea_indiv:
     input: 

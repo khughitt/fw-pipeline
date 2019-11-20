@@ -75,7 +75,7 @@ if (snakemake@config$dev_mode$enabled) {
 
 ```{r, results = 'asis', dpi = 128}
 for (dataset_id in names(wts_list)) {
-  cat(sprintf("### %s\n", dataset_id))
+  cat(sprintf("\n### %s\n\n", dataset_id))
 
   dataset <- wts_list[[dataset_id]]
 
@@ -188,6 +188,49 @@ for (collection in names(gene_set_collections)) {
     sub(',\\d+\\.\\d+$', '', x)
   })
 }
+```
+
+```{r include = FALSE}
+if (snakemake@config$dev_mode$enabled) {
+  save.image('/rda/nih/fw/combined_weights_summary.rda')
+}
+```
+
+```{r results = 'asis'}
+# plot distribution of gene set sizes prior to filtering
+gene_set_sizes <- NULL
+
+for (collection in names(gene_set_collections)) {
+  set_sizes <- unlist(lapply(gene_set_collections[[collection]], length))
+  gene_set_sizes <- rbind(gene_set_sizes, data.frame(collection, n = set_sizes))
+}
+colnames(gene_set_sizes) <- c('collection', 'n')
+
+gene_set_sizes %>%
+  group_by(collection) %>%
+  summarize(min_size = min(n), median_size = median(n), max_size = max(n))
+```
+
+```{r}
+# plot gene set size distributions, split across several plots
+num_plts_per_image <- 9
+
+for (i in seq_len(ceiling(length(gene_set_collections) / num_plts_per_image))) {
+  start_ind <- (i - 1) * num_plts_per_image + 1
+  end_ind   <- min(length(gene_set_collections), i * num_plts_per_image)
+
+  plt_dat <- gene_set_sizes %>%
+    filter(collection %in% names(gene_set_collections)[start_ind:end_ind])
+
+  plt <- ggplot(plt_dat, aes(x = n, fill = collection)) +
+    geom_density() +
+    facet_wrap(~collection, scales = 'free') +
+    geom_vline(xintercept = config$max_size, color = 'red', linetype = 'dashed') +
+    theme_bw() +
+    theme(legend.position = 'none')
+
+  print(plt)
+}
 
 # exclude any gene sets which are either too large or too small
 for (collection in names(gene_set_collections)) {
@@ -205,7 +248,7 @@ fgsea_res %>%
   summarize(mean_pval = mean(pval), median_pval = median(pval),
             num_sig = sum(padj < 0.05),
             n = n()) %>%
-  arrange(mean_pval)
+  arrange(desc(num_sig))
 ```
 
 ## Gene set collections with the highest levels of enrichment

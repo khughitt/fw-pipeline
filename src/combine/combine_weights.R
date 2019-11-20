@@ -46,14 +46,13 @@ wts$mean_score <- apply(wts_mat, 1, mean, na.rm = TRUE)
 
 # combined score
 wts <- wts %>%
-  mutate(combined_score = pmax(max_score, mean_score)) %>%
-  arrange(desc(combined_score))
+  arrange(desc(mean_score))
 
 # drop individual scores
 wts <- wts %>%
-  select(symbol, max_score, mean_score, combined_score)
+  select(symbol, max_score, mean_score)
 
-# debug
+# store environment
 if (snakemake@config$dev_mode$enabled) {
   save.image('/rda/nih/fw/combine_weights.rda')
 }
