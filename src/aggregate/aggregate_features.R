@@ -14,6 +14,8 @@ infile <- file.path(snakemake@config$gene_sets$include, sprintf("%s.gmt", snakem
 gene_sets <- geneIds(getGmt(infile))
 gene_sets <- gene_sets[gene_sets != '']
 
+save.image('~/tmp.rda')
+
 # remove any leading or trailing whitespace in gene set names;
 # encountered at least one instance of this ("HEK 293 T-rex" in NCI-60 gene set
 # collection)
@@ -22,13 +24,20 @@ names(gene_sets) <- trimws(names(gene_sets))
 # remove gene set weights, if present
 # e.g. "ANXA1,1.0" -> "ANXA1"
 gene_sets <- lapply(gene_sets, function(x) {
-  sub(',\\d+\\.\\d+$', '', x)
+  sub(',-?\\d+\\.\\d+$', '', x)
 })
 
 # exclude any gene sets which are either too large or too small
 set_sizes <- lapply(gene_sets, length)
 mask <- (set_sizes >= snakemake@config$gene_sets$min_size) & (set_sizes <= snakemake@config$gene_sets$max_size)
 gene_sets <- gene_sets[mask]
+
+# if no gene sets in the desired range remain, create an empty output file and stop
+# here
+if (length(gene_sets) == 0) {
+  file.create(snakemake@output)
+  quit(save = 'no')
+}
 
 # create a pathway / gene set-projected version of feature data; collection and gene set
 # information are stored in a separate data.frame to preserve numeric name of feature
@@ -53,6 +62,10 @@ for (gene_set in names(gene_sets)) {
 # combine aggregated data and id columns
 aggregated_feat_dat <- cbind(as.data.frame(aggregated_feat_id_cols),
                              aggregated_feat_dat)
+
+if (nrow(aggregated_feat_dat) == 0) {
+  stop(sprintf("Error: no rows after aggregating data for %s!", snakemake@wildcards$gene_set))
+}
 
 colnames(aggregated_feat_dat)[1:2] <- c('collection', 'gene_set')
 

@@ -62,9 +62,7 @@ if config['dev_mode']['enabled']:
 rule summarize_combined_aggregated_weights:
     input: 
         indiv_weights = expand(join(output_dir, 'weights/individual/{dataset}/gene_sets/{agg_func}/{feature}/{phenotype}.tsv.gz'), zip, dataset=datasets, agg_func=agg_funcs, feature=features, phenotype=phenotypes),
-        indiv_fgsea = expand(join(output_dir, 'fgsea/individual/{dataset}/gene_sets/{agg_func}/{feature}/{phenotype}.tsv.gz'), zip, dataset=datasets, agg_func=agg_funcs, feature=features, phenotype=phenotypes),
-        combined_weights = expand(join(output_dir, 'weights/combined/gene_sets/{agg_func}/combined_weights_{cor_method}_{collapse_func}.tsv.gz'), agg_func=agg_funcs, cor_method=cor_methods, collapse_func=collapse_funcs),
-        combined_fgsea = expand(join(output_dir, 'fgsea/combined/gene_sets/{agg_func}/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz'), agg_func=agg_funcs, cor_method=cor_methods, collapse_func=collapse_funcs)
+        combined_weights = expand(join(output_dir, 'weights/combined/gene_sets/{agg_func}/combined_weights_{cor_method}_{collapse_func}.tsv.gz'), agg_func=agg_funcs, cor_method=cor_methods, collapse_func=collapse_funcs)
     output:
         join(report_dir, 'combined_aggregated_weights_summary.html')
     script:
@@ -88,27 +86,12 @@ rule run_fgsea_combined_individual_weights:
         join(output_dir, 'fgsea/combined/genes/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz')
     script: 'src/enrichment/run_fgsea.R'
 
-rule run_fgsea_combined_aggregated_weights:
-    input: 
-        #expand(join(output_dir, 'weights/combined_weights_{cor_method}_{collapse_func}s.tsv.gz'), 
-        #       cor_method=cor_methods, collapse_func=collapse_funcs)
-        join(output_dir, 'weights/combined/gene_sets/{agg_func}/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
-    output:
-        join(output_dir, 'fgsea/combined/gene_sets/{agg_func}/combined_weights_{cor_method}_{collapse_func}_fgsea.tsv.gz')
-    script: 'src/enrichment/run_fgsea.R'
 
 rule run_fgsea_individual_weights:
     input: 
         join(output_dir, 'weights/individual/{dataset}/genes/{feature}/{phenotype}.tsv.gz') 
     output:
         join(output_dir, 'fgsea/individual/{dataset}/genes/{feature}/{phenotype}.tsv.gz')
-    script: 'src/enrichment/run_fgsea.R'
-
-rule run_fgsea_aggregated_weights:
-    input: 
-        join(output_dir, 'weights/individual/{dataset}/gene_sets/{agg_func}/{feature}/{phenotype}.tsv.gz') 
-    output:
-        join(output_dir, 'fgsea/individual/{dataset}/gene_sets/{agg_func}/{feature}/{phenotype}.tsv.gz')
     script: 'src/enrichment/run_fgsea.R'
 
 rule combine_individual_weights:
@@ -118,6 +101,8 @@ rule combine_individual_weights:
                dataset=datasets, feature=features, phenotype=phenotypes)
     output:
         join(output_dir, 'weights/combined/genes/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
+    params:
+        feature_level='genes'
     script: 'src/combine/combine_weights.R'
 
 rule combine_aggregated_weights:
@@ -128,6 +113,8 @@ rule combine_aggregated_weights:
         dataset=agg_datasets, feature=agg_features, phenotype=agg_phenotypes)
     output:
         join(output_dir, 'weights/combined/gene_sets/{agg_func}/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
+    params:
+        feature_level='gene_sets'
     script: 'src/combine/combine_weights.R'
 
 rule build_individual_weights:
@@ -136,6 +123,8 @@ rule build_individual_weights:
         phenotype=join(output_dir, 'datasets/{dataset}/phenotypes/{phenotype}.tsv.gz')
     output:
         join(output_dir, 'weights/individual/{dataset}/genes/{feature}/{phenotype}.tsv.gz')
+    params:
+        feature_level='genes'
     script: 'src/datasource/pharmacogx/build_weights.R'
 
 rule build_aggregated_weights:
@@ -144,15 +133,19 @@ rule build_aggregated_weights:
         phenotype=join(output_dir, 'datasets/{dataset}/phenotypes/{phenotype}.tsv.gz')
     output:
         join(output_dir, 'weights/individual/{dataset}/gene_sets/{agg_func}/{feature}/{phenotype}.tsv.gz')
+    params:
+        feature_level='gene_sets'
     script: 'src/datasource/pharmacogx/build_weights.R'
 
 rule merge_aggregated_features:
     input:
         expand(join(output_dir,
-        'datasets/{{dataset}}/features/gene_sets/{gene_set}/{{agg_func}}/{{feature}}.tsv.gz'),
-        gene_set=gene_set_names)
+               'datasets/{{dataset}}/features/gene_sets/{gene_set}/{{agg_func}}/{{feature}}.tsv.gz'),
+               gene_set=gene_set_names)
     output:
         join(output_dir, 'datasets/{dataset}/features/gene_sets/{agg_func}/{feature}_gene_sets.tsv.gz')
+    threads: 1
+    script: 'src/aggregate/merge_aggregated_features.R'
 
 rule aggregate_features:
     input:
