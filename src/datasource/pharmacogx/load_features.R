@@ -1,37 +1,30 @@
-#/usr/bin Rscript
 #
 # Generate clean version of PharmacoGx feature data
 #
 suppressMessages(library(annotables))
 suppressMessages(library(Biobase))
 suppressMessages(library(PharmacoGx))
-suppressMessages(library(tidyverse))
-
-options(stringsAsFactors = FALSE)
-set.seed(1)
 
 #
 # Setup
 #
-config <- snakemake@params$config
-pset_id <- config$pset
+load_pharmacogx_feature <- function(config, mdatatype, output_file) {
+  pset_id <- config$pset
 
-supported_psets <- c('GDSC1000', 'CCLE_2013')
+  supported_psets <- c('GDSC1000', 'CCLE_2013')
 
-if (!pset_id %in% supported_psets) {
-  stop(sprintf("Unsupported Pharmacoset specified: %s!", pset_id))
-}
+  if (!pset_id %in% supported_psets) {
+    stop(sprintf("Unsupported Pharmacoset specified: %s!", pset_id))
+  }
 
-pset_rda <- file.path(config$cache_dir, paste0(pset_id, '.RData'))
+  pset_rda <- file.path(config$cache_dir, paste0(pset_id, '.RData'))
 
-if (!file.exists(pset_rda)) {
-  pset <- downloadPSet(pset_id, saveDir = config$cache_dir)
-} else {
-  pset <- get(load(pset_rda))
-}
+  if (!file.exists(pset_rda)) {
+    pset <- downloadPSet(pset_id, saveDir = config$cache_dir)
+  } else {
+    pset <- get(load(pset_rda))
+  }
 
-# iterate over feature datasets and generate "clean" versions of each
-for (mdatatype in names(config$features)) {
   eset <- summarizeMolecularProfiles(pset, mDataType = mdatatype)
 
   # convert expressionset to a tibble
@@ -71,5 +64,5 @@ for (mdatatype in names(config$features)) {
     group_by(symbol) %>%
     summarize_all(mean) %>%
     ungroup %>%
-    write_tsv(snakemake@output[[1]])
+    write_tsv(output_file)
 }
