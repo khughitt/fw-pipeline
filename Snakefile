@@ -47,26 +47,30 @@ collapse_funcs = config['combine']['correlation']['collapse_funcs']
 if config['dev_mode']['enabled']:
     os.makedirs(config['dev_mode']['rda_dir'], mode = 755, exist_ok=True)
 
+rule all:
+    input: 
+        expand(join(report_dir, '{feature_type}/{feature_level}/feature_weights_summary.html'),
+               feature_type=feature_types, feature_level=feature_levels)
+
 rule summarize_combined_weights:
     input: 
         indiv_weights = expand(join(output_dir,
-            'weights/data_sources/{data_source}/{feature_type}/{feature_level}/{phenotype}.tsv.gz'), zip,
-            data_source=data_sources, feature_type=feature_types, feature_level=feature_levels, phenotype=phenotypes),
-        combined_weights = expand(join(output_dir, 'weights/combined/combined_weights_{cor_method}_{collapse_func}.tsv.gz'), cor_method=cor_methods, collapse_func=collapse_funcs),
+            'weights/data_sources/{data_source}/{{feature_type}}/{{feature_level}}/{phenotype}.tsv.gz'), zip,
+            data_source=data_sources, phenotype=phenotypes),
+        combined_weights = expand(join(output_dir, 'weights/combined/{{feature_type}}/{{feature_level}}/combined_weights_{cor_method}_{collapse_func}.tsv.gz'), 
+                                  cor_method=cor_methods, collapse_func=collapse_funcs)
     output:
-        join(report_dir, 'combined_weights_genes_summary.html')
+        join(report_dir, '{feature_type}/{feature_level}/feature_weights_summary.html')
     script:
-        'reports/combined_weights_summary.Rmd'
+        'reports/feature_weights_summary.Rmd'
 
 rule combine_data_source_weights:
     input: 
-        expand(join(output_dir, 'weights/data_sources/{data_source}/{feature_type}/{feature_level}/{phenotype}.tsv.gz'),
+        expand(join(output_dir, 'weights/data_sources/{data_source}/{{feature_type}}/{{feature_level}}/{phenotype}.tsv.gz'),
                zip,
-               data_source=data_sources, feature_type=feature_types, feature_level=feature_levels, phenotype=phenotypes)
+               data_source=data_sources, phenotype=phenotypes)
     output:
-        join(output_dir, 'weights/combined/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
-    params:
-        feature_level='genes'
+        join(output_dir, 'weights/combined/{feature_type}/{feature_level}/combined_weights_{cor_method}_{collapse_func}.tsv.gz')
     script: 'src/combine/combine_weights.R'
 
 rule build_data_source_weights:

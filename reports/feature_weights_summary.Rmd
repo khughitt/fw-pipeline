@@ -1,0 +1,150 @@
+---
+title: "Comparison of Gene Weights"
+date: "`r strftime(Sys.time(), '%Y-%m-%d')`"
+params:
+   rmd: "combined_weights_summary.Rmd"
+output:
+  html_document:
+    df_print: kable
+    toc: true
+    toc_depth: 2
+---
+
+# Overview
+
+In this file, different versions of the gene weightings (generated via different
+gene-phenotype associations methods or parameters and different methods for generating
+combined weights from the inidivual sources) are compared.
+
+Naming Conventions:
+
+- **dataset**: `XX_pearson_max` -- maximum feature-pheno pearson correlation used as weight
+- **field**: `max_score`: when combining weights from different sources, the maximum
+  value is used.
+
+(Note: the handling and presentation of dataset sources, methods used to measure
+gene-phenotype associations, and methods for collapsing individual dataset weights needs
+to be improved..)
+
+# Setup
+
+```{r, message = FALSE}
+library(knitr)
+library(gridExtra)
+library(tidyverse)
+
+options(stringsAsFactors = FALSE)
+options(digits = 3)
+
+opts_chunk$set(fig.width = 20, fig.height = 11.24, dpi = 192, retina = 1)
+```
+
+# Feature Weights
+
+```{r include = FALSE}
+# debug
+if (snakemake@config$dev_mode$enabled) {
+  if (!dir.exists('/rda/nih/fw/reports')) {
+    dir.create('/rda/nih/fw/reports', mode='0755', recursive=TRUE)
+  }
+  save.image('/rda/nih/fw/reports/feature_weights_summary.rda')
+}
+```
+
+```{r}
+if (snakemake@wildcards$feature_level == 'gene_sets') {
+  feat_ids <- c('collection', 'gene_set')
+  feat_id_indices <- 1:2
+} else {
+  feat_ids <- 'symbol'
+  feat_id_indices <- 1
+}
+```
+
+```{r load_feature_weights}
+# load feature weights
+gene_weight_files <- c(snakemake@input$indiv_weights, snakemake@input$combined_weights)
+
+# drop redundant files due to expand
+gene_weight_files <- unique(gene_weight_files)
+
+wts_list <- lapply(gene_weight_files, read_tsv, col_types = cols())
+names(wts_list) <- gene_weight_files
+
+sapply(wts_list, nrow)
+sapply(wts_list, ncol)
+```
+
+## Distribution of Feature Weghts
+
+```{r, results = 'asis', dpi = 128}
+for (dataset_id in names(wts_list)) {
+  cat(sprintf("\n### %s\n\n", dataset_id))
+
+  dataset <- wts_list[[dataset_id]]
+
+  plts <- list()
+
+  for (feat_wt in colnames(dataset)[-feat_id_indices]) {
+    plt_title <- sprintf("%s - %s", dataset_id, feat_wt)
+
+    if (grepl('auc', feat_wt)) {
+      plt_color <- '#e31a51'
+    } else if(grepl('ic50', feat_wt)) {
+      plt_color <- '#4fe319'
+    } else {
+      plt_color <- '#194fe3'
+    }
+
+    plt_dat <- data.frame(x = dataset[[feat_wt]])
+
+    plts[[plt_title]] <- ggplot(plt_dat, aes(x)) +
+      geom_density(fill = plt_color) +
+      xlab('weight') +
+      ggtitle(plt_title)
+  }
+
+  grid.arrange(grobs = plts, ncol = min(length(plts), 3))
+
+  cat('\n')
+}
+```
+
+# Top features
+
+```{r, results = 'asis'}
+for (dataset_id in names(wts_list)) {
+  cat(sprintf("## %s\n", dataset_id))
+
+  wts <- wts_list[[dataset_id]] %>%
+    pivot_longer(-feat_ids, names_to = 'method', values_to = 'score')
+
+  for (score_method in unique(wts$method)) {
+    cat(sprintf("### %s\n", score_method))
+
+    wts %>%
+      filter(method == score_method) %>%
+      select(-method) %>%
+      arrange(desc(score)) %>%
+      head(15) %>%
+      kable() %>%
+      print()
+
+    cat('\n')
+  }
+}
+```
+
+```{r include = FALSE}
+if (snakemake@config$dev_mode$enabled) {
+  save.image('/rda/nih/fw/combined_weights_summary.rda')
+}
+```
+
+
+# Session Information
+
+```{r}
+sessionInfo()
+```
+

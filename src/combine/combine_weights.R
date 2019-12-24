@@ -4,25 +4,29 @@
 #
 suppressMessages(library(tidyverse))
 
-# get datasource settings
-data_source_config <- snakemake@config$data_sources[[snakemake@wildcards$data_source]]
-
-# feature column name
-feat_type <- snakemake@wildcards$feature_type
-feat_level <- snakemake@wildcards$feature_level
-
-feat_key <- data_source_config$features[[feat_type]][[feat_level]]$key
-
 if (snakemake@config$dev_mode$enabled) {
-  save.image('/rda/nih/fw/combine_weights.rda')
+    if (!dir.exists('/rda/nih/fw/src/combine')) {
+        dir.create('/rda/nih/fw/src/combine', mode = '0755', recursive = TRUE)
+    }
+  save.image('/rda/nih/fw/src/combine/combine_weights.rda')
 }
 
+# feature column name
+feat_level <- snakemake@wildcards$feature_level
+
+if (feat_level == 'genes') {
+    feat_keys <- 'symbol'
+} else if (feat_level == 'gene_sets') {
+    feat_keys <- c('collection', 'gene_set')
+}
+
+
 # load individual dataset weights
-infiles <- unlist(snakemake@input)
+infiles <- unique(unlist(snakemake@input))
 wts_list <- lapply(infiles, read_tsv, col_types = cols())
 
 # TEMP: manually load multiple myeloma-based gene weights for now;
-if (feat_key == 'symbol') {
+if (length(feat_keys) == 1) {
   # genes
   mm_wts <- read_csv('/data/nih/archive/gene-weights/mm/2019-10-24/combined/gene_weights.csv',
                     col_types = cols()) %>%
@@ -34,10 +38,12 @@ if (feat_key == 'symbol') {
     rename(mm_score = score)
 
   # combine <collection, gene_set> cols
-  mm_wts$gene_set <- sprintf("%s_%s", mm_wts$collection, mm_wts$gene_set)
+  # mm_wts$gene_set <- sprintf("%s_%s", mm_wts$collection, mm_wts$gene_set)
 
-  mm_wts <- mm_wts %>%
-    select(-collection)
+  # mm_wts <- mm_wts %>%
+  #   select(-collection)
+
+  # feat_keys <- 'gene_set'
 }
 
 # drop mm weights measured in less than 25% of the datasets used for its construction
@@ -46,7 +52,7 @@ min_meas <- max(mm_wts$num_measurements) * 0.25
 
 mm_wts <- mm_wts %>%
   filter(num_measurements >= min_meas) %>%
-  select(feat_key, mm_score)
+  select(feat_keys, mm_score)
 
 wts_list[[length(wts_list) + 1]] <- mm_wts
 
@@ -55,16 +61,16 @@ wts_list <- wts_list[order(-rank(unlist(lapply(wts_list, nrow)), ties.method = '
 
 # combine individual weights into a single tibble
 wts <- wts_list %>%
-  reduce(left_join, by = feat_key)
+  reduce(left_join, by = feat_keys)
 
 weight_suffix <- sprintf("%s_%s", snakemake@wildcards$collapse_func,
                          snakemake@wildcards$cor_method)
 
 wts <- wts %>%
-  select(feat_key, mm_score, ends_with(weight_suffix))
+  select(feat_keys, mm_score, ends_with(weight_suffix))
 
 # scale weights so that each source contributes equally
-feat_id_ind <- which(colnames(wts) %in% feat_key)
+feat_id_ind <- which(colnames(wts) %in% feat_keys)
 wts[, -feat_id_ind] <- scale(wts[, -feat_id_ind])
 
 wts_mat <- wts[, -feat_id_ind]
@@ -78,11 +84,11 @@ wts <- wts %>%
 
 # drop individual scores
 wts <- wts %>%
-  select(feat_key, max_score, mean_score)
+  select(feat_keys, max_score, mean_score)
 
 # store environment
 if (snakemake@config$dev_mode$enabled) {
-  save.image('/rda/nih/fw/combine_weights.rda')
+  save.image('/rda/nih/fw/src/combine/combine_weights.rda')
 }
 
 write_tsv(wts, snakemake@output[[1]])
