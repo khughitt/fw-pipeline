@@ -10,7 +10,12 @@ config <- snakemake@params$config
 
 # detect phenotype and data source type
 phenotype   <- snakemake@wildcards$phenotype
-data_source <- config$phenotypes[[phenotype]]$data_source
+
+print(phenotype)
+print(config$phenotype)
+
+pheno_config <- config$phenotypes[[phenotype]]
+data_source <- pheno_config$data_source
 
 # pharmacogx
 if (data_source == 'pharmacogx') {

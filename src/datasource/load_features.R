@@ -16,7 +16,7 @@ feature_level <- snakemake@wildcards$feature_level
 # feature config
 feature_config <- config$features[[feature_type]][[feature_level]]
 
-data_source <- config$features[[feature_type]][[feature_level]]$data_source
+data_source <- feature_config$data_source
 
 save.image('~/tmp-parse-features.rda')
 
