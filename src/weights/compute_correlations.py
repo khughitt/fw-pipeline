@@ -1,6 +1,7 @@
 """
 " Compute feature-phenotype correlations
 """
+from numba import njit
 import numpy as np
 import pandas as pd
 import feather
@@ -23,6 +24,50 @@ def corrcoeff_einsum_optimized(O, P):
     tmp = np.einsum("m,t->mt", varP, varO, optimize='optimal')
 
     return cov / np.sqrt(tmp)
+
+"""
+Fast Spearman correlation calculation
+
+https://stackoverflow.com/questions/52371329/fast-spearman-correlation-between-two-pandas-dataframes
+"""
+@njit
+def mean1(a):
+  n = len(a)
+  b = np.empty(n)
+  for i in range(n):
+    b[i] = a[i].mean()
+  return b
+
+@njit
+def std1(a):
+  n = len(a)
+  b = np.empty(n)
+  for i in range(n):
+    b[i] = a[i].std()
+  return b
+
+@njit
+def spearman_cor(a, b):
+    """
+    Spearman correlation
+
+    Expects value rankings from unrolled 2d arrays with the same numbers of columns
+    """
+    n, k = a.shape
+    m, k = b.shape
+
+    mu_a = mean1(a)
+    mu_b = mean1(b)
+    sig_a = std1(a)
+    sig_b = std1(b)
+
+    out = np.empty((n, m))
+
+    for i in range(n):
+        for j in range(m):
+            out[i, j] = (a[i] - mu_a[i]) @ (b[j] - mu_b[j]) / k / sig_a[i] / sig_b[j]
+
+    return out
 
 # main
 #  mat = np.load(snakemake.input[0])
@@ -68,6 +113,10 @@ pheno_mat = pheno_dat.loc[:, sample_ids].to_numpy().T
 # pearson correlation
 if snakemake.wildcards['cor_method'] == 'pearson':
     cor_mat = corrcoeff_einsum_optimized(feat_mat, pheno_mat)
+elif snakemake.wildcards['cor_method'] == 'spearman':
+    cor_mat = spearman_cor(pd.DataFrame(feat_mat.T).rank(1).values, 
+                           pd.DataFrame(pheno_mat.T).rank(1).values)
+    cor_mat = cor_mat.T
 else:
     raise Exception("Invalid correlation method specified!")
 
