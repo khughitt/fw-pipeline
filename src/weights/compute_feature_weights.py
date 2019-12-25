@@ -28,7 +28,7 @@ else:
     res = cor_mat.apply(collapse_func, axis=1)
 
 res = pd.DataFrame(res)
-res.columns = [collapse_func]
+res.columns = ['score']
 
 res.to_csv(snakemake.output[0], sep='\t')
 

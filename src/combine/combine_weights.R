@@ -20,9 +20,8 @@ if (feat_level == 'genes') {
     feat_keys <- c('collection', 'gene_set')
 }
 
-
 # load individual dataset weights
-infiles <- unique(unlist(snakemake@input))
+infiles <- unlist(snakemake@input)
 wts_list <- lapply(infiles, read_tsv, col_types = cols())
 
 # TEMP: manually load multiple myeloma-based gene weights for now;
@@ -63,15 +62,18 @@ wts_list <- wts_list[order(-rank(unlist(lapply(wts_list, nrow)), ties.method = '
 wts <- wts_list %>%
   reduce(left_join, by = feat_keys)
 
-weight_suffix <- sprintf("%s_%s", snakemake@wildcards$collapse_func,
-                         snakemake@wildcards$cor_method)
+# weight_suffix <- sprintf("%s_%s", snakemake@wildcards$collapse_func,
+#                          snakemake@wildcards$cor_method)
 
 wts <- wts %>%
-  select(feat_keys, mm_score, ends_with(weight_suffix))
+  select(feat_keys, mm_score, starts_with('score'))
 
 # scale weights so that each source contributes equally
 feat_id_ind <- which(colnames(wts) %in% feat_keys)
-wts[, -feat_id_ind] <- scale(wts[, -feat_id_ind])
+
+unscaled_totals <- colSums(wts[, -feat_id_ind], na.rm = TRUE)
+
+wts[, -feat_id_ind] <- sweep(wts[, -feat_id_ind], 2, unscaled_totals, '/') * 1e6
 
 wts_mat <- wts[, -feat_id_ind]
 
